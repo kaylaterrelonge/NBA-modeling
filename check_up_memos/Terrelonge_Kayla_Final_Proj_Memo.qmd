@@ -1,0 +1,46 @@
+---
+title: "Final Project Check-Up Memo"
+subtitle: "Data Science 2 with R (STAT 301-2)"
+author: "Kayla Terrelonge"
+
+format:
+  html:
+    toc: true
+    embed-resources: true
+    code-fold: show
+    link-external-newwindow: true
+    
+execute:
+  warning: false
+  message: false
+  echo: true
+  
+from: markdown+emoji  
+---
+
+# Introduction
+
+In the following memo, I will be giving a brief overview about my project, the data used in the project, and the proposed research question at the forefront of the project.
+
+## Proposed Timeline
+
+Since the concepts and components of this project are much more complex than the project for Stat 301-1, I plan to begin this project after submitting the memo, with the general structure of completing one major task per week. This should leave me with ample time to revise and check in with Professor Sass to ensure I am on the right track for the project. 
+
+The following plan is tentative, however, I do plan to stick to this schedule. Because I am using data from my project from the previous quarter, there is no extensive cleaning needed, I may remove the `year` variable in my set to avoid any time-date predictors.  During week 5 and 6, I plan to complete an extensive EDA and identify predictor and outcome variables. I want to use two weeks for this process in case I struggle with identifying good outcome and predictor variables, which would mean I would need to find some other supporting data. During weeks 7-9 I plan to focus on the model building workflow and tailoring models when necessary. I figure this step will be the most time consuming and difficult, so I want to give myself ample time to complete it. I also plan to create my final presentation during this time, and hopefully have everything submitted for the early submission deadline.
+
+## Overview of Dataset
+
+As for my dataset, the set is from [ESPN](https://www.espn.com/nba/stats/player/_/season/2020/seasontype/3/table/offensive/sort/avgThreePointFieldGoalsMade/dir/desc). The data is collected live during the regular season and averages are calculated at the end of the season. 
+
+The data is from every NBA regular season game starting with the 2001-2002 season.
+There is 26 variables including `rank`, average `FG%`, and average `3PM` to name a few. There are almost 10,000 observations. It should be noted that because the values for each player is an average value from their season performance, there are no missing values. However, in ESPN collection method, a player's stats are recorded if they play at least 70% of the games per season. The main variable types are numeric and character variables.
+
+To collect this data, last quarter, I exported it from ESPN's website and imported it into an excel sheet, then I tidied it in R.
+
+## Statement and Description of Prediction Problem/Question
+
+The question I plan to model is "How many points will a team average per season?". This will be a regression problem, with a response variable of `FG%`. Despite not having completed an EDA yet, I think variables involving number of high `rank` players on a team, the `3PM` and the `Min` will be indicator variables.
+
+## Anticipated Difficulties or Challenges
+
+I think the main challenge will be having to look at the same data set from a new perspective. Since I have worked with this data set before, I have made a lot of inferences about the data, however, with modeling it requires a complete new point of view, which will be difficult. Also, there are a lot of possibilities for predictor variables, so I anticipate that choosing the bes ones will be difficult.

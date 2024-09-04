@@ -1,0 +1,65 @@
+---
+title: "Executive Summary - An All-Star Model: Predicting NBA Player Performance"
+subtitle: "Data Science 2 with R (STAT 301-2)"
+author: "Kayla Terrelonge"
+
+format:
+  html:
+    toc: true
+    toc-depth: 4
+    embed-resources: true
+    code-fold: show
+    link-external-newwindow: true
+    
+execute:
+  warning: false
+  message: false
+  echo: false
+  
+from: markdown+emoji 
+---
+
+## Introduction
+
+The purpose of this project was to develop a regression model that answers the question of "How many points will a NBA player average?". The project led to the creation of a Boosted Tree Model with recipe specifications that are outlined later in this summary. The model produced in this project proved to serve this purpose and provide better estimated values, as opposed to random guessing. The main points of the project are stated below.
+
+## Motivation and Process
+
+The motivation of this project is to provide basketball recruiters and sport betters a tool to make an educated guess in their work, which requires consulting performance and making costly decisions. The process of developing this model included creating multiple recipes and models and selecting the best combination based on a chosen metric. In this case, the chosen metric was RMSE. The models were tuned using their subsequent tuning parameters and cross validation resampling was used to identify the best model and its specifications that tailor the model to the data set.
+
+## Results 
+
+From the chosen model and recipe combination, a model was fit to the testing data set and it was found to have an RMSE and R^2 value of 0.0165 and 0.9979, respectively. These values were better than the metrics produced by the model that replicates random guesses, indicating the model actually served a purpose in predicting the average points of a player.
+
+```{r}
+#| label: mod-results
+# load pkges
+library(tidymodels)
+library(tidyverse)
+
+# loading in data
+load("final_model/final_bt_metrics.rda")
+
+# performance plots
+nba_predicted %>% 
+  ggplot(mapping = aes(x = pred_og, y = pts)) +
+  geom_point() + 
+  geom_smooth(method = "lm") +
+  labs(title = "The Predicted Values v. The Actual Values on the Original Scale")
+
+nba_predicted %>% 
+ggplot(nba_predicted, mapping = aes(x = log_pts, y = log_pred)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  labs(title = "The Predicted Values v. The Actual Values on the Log Scale")
+```
+
+## Conclusions
+
+In conclusion, the model and recipe combination indicates that variables that are important in predicting the average number of points of a player are `rank`, `gp`,
+`min`, `fga`, `fg_percent`, `fta`, `ft_percent`, `reb`, `ast`, `stl`, `blk`, `to`,
+`three_point_attempt`, `dd2`, `three_point_perc`, and `conference`. Variables like `pos` and `per` are not important in predicting the average number of points for a player per season, as the recipe that removed these values performed the best. Variables such as `ftm`, `fgm`, and `three_point_made` can not be used in the model, as their direct relationship with the calculation of the average number of points leads to a model with perfect results, as these variables in total make up the outcome variable.
+
+When looking at and evaluating the process used in this project, it could be improved by doing further tuning and researching the data collection and calculation techniques. The benefits of this would be a more realistic model, as the nearly perfect results portrayed above indicate there is some underlying variable that is very predicative, almost to the point where it is directly involved in the calculation of the average points. Not to mention, further tuning would lead to an even better model, with the tuning parameters ranges being specified more, until favorable results are achevived.
+
+

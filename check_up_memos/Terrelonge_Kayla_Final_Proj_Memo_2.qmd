@@ -1,0 +1,102 @@
+---
+title: "Final Project Check Up Memo #2"
+subtitle: "Data Science 2 with R (STAT 301-2)"
+author: "Kayla Terrelonge"
+
+format:
+  html:
+    toc: true
+    embed-resources: true
+    code-fold: show
+    link-external-newwindow: true
+    
+execute:
+  warning: false
+  message: false
+  
+from: markdown+emoji  
+---
+## Load Packages
+```{r}
+#| label: load-pkges
+library(tidyverse)
+library(janitor)
+library(skimr)
+```
+
+## Confirmation of Data
+
+Since the last check in memo, because of issues with missingness and complications with the data, I was granted to use my data set from last quarter's final project. Because I did significant data cleaning, webscrapping, and tidying, the data set is tidy and clean. The data was collected from 20 years worth of ESPN stats. It contains 27 variables with 21 numeric variables. It will be read in below.
+
+## Data Assurance and Validation Checks
+```{r}
+#| label: load-data
+nba <- read_csv("data/processed_data/nba_players.csv")
+```
+```{r}
+#| label: inspecting-tidyness
+nba <- nba %>% 
+  # fixing any inconsistency in naming
+  janitor::clean_names() %>% 
+  # changing variables as factor
+  mutate(conference = as.factor(conference),
+         team = as.factor(team),
+         team_class = as.factor(team_class),
+         pos = as.factor(pos))
+# writing out to data folder
+write_rds(nba, "data/processed_data/nba_players.rds")
+```
+
+There were some minor issues with reading in, `team`, `conference`, `pos`, and `team_class` should have been treated as a factor, but it was treated as a character variable.
+
+```{r}
+#| label: checking-for-missingness
+skim_without_charts(nba)
+```
+There is no significant issues with missingness. The position (`pos`) variable has the highest amount of missing observations, with 10 being missing. This could easily just be due to inconsistencies in data collection. However, since the data contains information for players each year, if the player played in another year for the same team, the value can be imputed from this.
+
+```{r}
+#| label: inspecting-outcome-var
+# creating a correlation matrix
+corr_nba <- nba %>% 
+  select(-c(name, season, pos, team, team_class, conference)) %>% 
+  cor() 
+
+corr_nba[4,]
+
+```
+It seems that the outcome variable of `pts` has a strong correlation with `rank`, `min`,`fgm`,`fga`,and `to`. A scatterplot with this variables will be created to asses if there is a need for data transformations.
+
+```{r}
+#| label: plots 
+# has a downward funnel shape
+ggplot(nba, mapping = aes(x = rank, y = pts)) +
+  geom_point()
+
+# has a funnel shape
+ggplot(nba, mapping = aes(x = min, y = pts)) +
+  geom_point()
+
+# no obvious shapes for these variables
+ggplot(nba, mapping = aes(x = fgm, y = pts)) +
+  geom_point()
+
+ggplot(nba, mapping = aes(x = fga, y = pts)) +
+  geom_point()
+
+ggplot(nba, mapping = aes(x = to, y = pts)) +
+  geom_point()
+```
+
+Based on the plots above, there may need to be a log transformation to certain variables (`min`, `rank`)as there is a funnel shape with these variables and the outcome variable.
+
+## Outline for Data Splitting
+
+Since any issues found in the data are minor and have been mostly corrected above, the data will be used for the remainder of the project. The data will be split with 3 to 4 split, since the data set is large, more data can be allocated to the training set. The data will be split using `initial_split()` and will be stratified by the variable `pts`. I chose to do stratified sampling as there is wide range in metrics in the data, so I wanted to ensure that the data set population is represented accurately.
+
+## Summary of Progress
+
+As of now, an EDA for my data set has been conducted and variables that will be used as outcome variables have been decided. These variables are all numeric variables and the factor variable of `conference`.
+As for next steps, I plan to begin drafting recipes. In the recipe I want to use create 2 types, where I treat `conference` as a numeric variable with values of 0 or 1, and another where I leave it as is.
+
+

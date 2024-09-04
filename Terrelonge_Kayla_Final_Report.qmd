@@ -1,0 +1,232 @@
+---
+title: "An All-Star Model: Predicting NBA Player Performance"
+subtitle: "Data Science 2 with R (STAT 301-2)"
+author: "Kayla Terrelonge"
+
+format:
+  html:
+    toc: true
+    toc-depth: 4
+    embed-resources: true
+    code-fold: show
+    link-external-newwindow: true
+    
+execute:
+  warning: false
+  message: false
+  echo: false
+  
+from: markdown+emoji 
+---
+
+## Introduction
+
+The following report details the modeling process in response to the predicative question of "How many points will an NBA player average per season?". The objective of this regression problem is to identify which variables are most important in influencing the number of points a player will average in a given season. 
+
+The motivation for this project stems from a trend seen during recruiting, where a player does not maintain their performance in a new playing environment once they are recruited or drafted. By creating this model, coaches across the country could use it to make informed and educated decisions before drafting a player. Coaches can understand and model these players point trends before drafting them, which would also give them a better understanding of how long it will take for them to profit off of these trades. This can also be useful in sports betting, as it gives sports betters the opportunity to bet based on previous empirical evidence, instead of gut feelings and instincts, which can lead to costly losses.
+
+The data used for this project was collected from [ESPN](https://www.espn.com/nba/stats/player/_/season/2020/seasontype/3/table/offensive/sort/avgThreePointFieldGoalsMade/dir/desc). The data spans from the 2001-2002 season to the 2021-2022 season. ESPN collects statistics on every player that appears in at least 70% of games in given season and at the end of the season it averages the statistics to give the average performance of a NBA player.
+
+
+## Data Overview
+
+As mentioned above, the data contains data for players over the past 20 seasons. The raw data set contained 26 variables and 10,906 observations. Because the data was used in the previous project for Stat 301-1, there was already an understanding about the data, its contents, and general trends seen in the data.
+
+To begin, the data had no severe missingness issues, there were only 11 missing values, with all the missing values being in the `per`, `pos`, and `season` variable. Because of the type of data and collection process used, these missing values could easily be imputed, as it was likely that a player played in the same `pos` during previous or following season, which could be usuful for imputing based on players of similar performance. Also, `season` could be imputed using nearest neighbors methods.
+
+Moving on to exploring any class imbalances, there was a class imbalance in the `team_class` variable, which was to be expected, as it is relatively rare for a player to switch teams mid-season.
+```{r}
+#| label: load-pkges
+library(tidyverse)
+library(tidymodels)
+```
+
+```{r}
+#| label: loading-data
+# reading in data and conducting skim
+nba <- read_rds("data/processed_data/nba_players.rds")
+
+# skimming data for missingness and class imbalance
+skimr::skim_without_charts(nba)
+
+# loading in sample of data from the training set
+load("results/nba_split.rda")
+
+# random sample for eda
+eda_train <- nba_train %>% 
+  slice_sample(n = 200)
+```
+
+Moving on to the exploration of the outcome variable `pts`, the distribution of the outcome variable seemed to have a have a left skew. 
+```{r}
+#| label: distribution-pts
+eda_train %>% 
+  ggplot(mapping = aes(pts)) +
+  geom_histogram(color = "white", bins = 35) +
+  labs(title = "The Original Distribution of Pts")
+```
+To address this skew, square rooting and logging transformations were conducted, with a log base 10 transformation seeming to address the the skew in `pts`. The outcome variable was transformed with the log base transformation, which helped address the skew. The different outcomes for the transformations of `pts` are shown below.
+
+```{r}
+#| label: outcome-transformation
+eda_train %>% 
+  ggplot(mapping = aes(log(pts))) +
+  geom_histogram(color = "white", bins = 35) +
+  labs(title = "The Distribution of Points with a Log Transformation",
+    caption = "log base e transformation")
+
+eda_train %>% 
+  ggplot(mapping = aes(log10(pts))) +
+  geom_histogram(color = "white", bins = 35) +
+  labs(title = "The Distribution of Points with a Log base 10 Transformation",
+    caption = "log base 10 transformation")
+
+# sqrt transformation
+eda_train %>% 
+  ggplot(mapping = aes(sqrt(pts))) +
+  geom_histogram(color = "white", bins = 35)  +
+  labs(title = "The Distribution of Points with a Square Root Transformation",
+    caption = "square root transformation")
+```
+
+After addressing these transformations, the correlation between the numeric variables with `log_pts`, with `log_pts` being the log of `pts` with a base of 10, was conducted to get an idea of good predictor variables for the model creation process. Based on this, the outcome variable has a strong positive correlation with `fgm`, `min`, and `fga`. There was a strong negative correlation with `rank`. The relationship with `rank` is as expected because it can be assumed that the higher a player ranks, the more points they will score. The relationship between points and the attempted field goals and minutes was also expected as the more minutes and more times a player attempts to shoot a fieldgoal, they have more opportunities to score points. 
+
+```{r}
+#| label: correlation-matrix
+# creating a correlation matrix
+corr_nba <- eda_train %>% 
+  select(-c(pos, team, team_class, conference, pts)) %>% 
+  cor() 
+
+# selecting the row that contains the outcome variable
+as.data.frame(corr_nba) %>% 
+  select(log_pts)
+
+ggplot(eda_train, mapping = aes(x = rank, y = log_pts)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "The Relationship Between Rank and Log Pts")
+
+ggplot(eda_train, mapping = aes(x = min, y = log_pts)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "The Relationship Between Minutes and Log Pts")
+
+ggplot(eda_train, mapping = aes(x = fgm, y = log_pts)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "The Relationship Between Field Goals Made and Log Pts")
+```
+
+It should be noted, that it was discovered for variables that are involved in the point calculations for a player, such as `fgm`, `ftm`, and `three_points_made`, although there might not be a strong correlation with. However, in terms of averages, there will be some discrepancies in this relationship, but they should follow the same trend, meaning that if they were included as predictor variables for `log_pts`, the model would not be beneficial, and simply would just be calculating `log_pts` from its relationships with these variables. Based on these findings, these variables should be removed during the model and recipe creation process and these would easily predict the outcome variable.
+
+## Methods 
+
+Moving on to the methods of this project, there were six models fit to the training data set. The models include a null model, random forest model, boosted tree model,k-nearest neighbor model, elastic net model, and an ordinary linear regression model. As for the tuning parameters for these models, the elastic net, k-nearest neighbor, random forest, and boosted tree models will be tuned.
+
+The null model is used to replicate random guessing and is used as a baseline  comparison. The elastic net model and linear regression models use a standard linear relationship, however, the elastic net model adds penalties for larger coefficents and reduces overfitting. KNN models looks at patterns in the training data and produces a model that replicates the patterns observed in the data. The random forest model is unique in a sense that it versatile yet very simple and mirrors the human decision making process. It is also resistant to outliers. Finally, the boosted tree model builds the trees sequentially and adjusts for errors made in the previous trees.
+
+The tuning parameters for the k-nearest neighbor model were the number of neighbors on a range from 1 through 25. The boosted tree model tuning parameters were the `mtry`, `learn_rate`, and `trees` with three levels used for the first two parameters, and five used for the last parameter. The random forest model used the tuning parameter of `m_try` with a range of 1 through 5, as it should be the square root of the number of predictor variables. Finally for the elastic net model, the tuning parameters included the `penalty` and `mixture`. The `penalty` allows for the shrinking of coefficents with this value and the `mixture` is on a range of 0 to 1, with 1 = pure lasso model and 0 = ridge model. It is indicating where the model lies on the types of linear regression models. `mtry` refers to a number of predictor variables that are sampled with each split, `trees` refer to the number of trees used in the model, and `learn_rate` is how the boosting adapts to the data for each run through of the model. `neighbors` refers to the number of neighbors used in the model. 
+
+For the recipe creation process, three recipes in total were created. The first recipe was a kitchen sink recipe, where all predictors are used. In this recipe, the variables with missing values were imputed with a `step_impute_mode()` for the factor variable `pos`  and `step_impute_knn()` for the numeric variable `per`. Next, `step_remove()` was used to remove the variables that are directly used in the calculation of the outcome variable. Those variables included `pts` ,`ftm` , `three_point_made` , `fgm`. Then, `step_dummy()` was used to convert the character and factor variables to numeric terms. Finally `step_nzv()` was used to remove variables that have sparsity or are unbalanced. 
+
+The next recipe took information from the exploratory data analysis and used that to decide which variables to incorporate. The recipe used the same imputing, removing, dummy encoding, and non-zero variance techniques outlines above. In addition to these, there were interaction terms added  between `gp` and `rank`, `fg_percent` and `min`, and `min` and `stl`. These interaction terms seek to determine if the relationship between those variables influence the outcome variable. Finally, a `step_normalize()` was used at the end of the recipe,  which gives numeric data a standard deviation of 1 and a mean of 0.
+
+The final recipe follows all of the tasks outlined for the first recipe, except, instead of imputing the missing values, the variables were removed. This recipe was used to see if these variables are essential in the model creation process.
+
+As for resampling, cross validation will be used on the training set. The training data will be broken up into 5 folds, with 3 repeats each. The samples were stratified by `log_pts`, which ensures that each sample reflects the trends and distribution of the entire training set in each sub-sample.
+
+Finally for evaluating and comparing models, because this is a regression problem, the Root Mean Squared Error (RMSE) will be used. This is a measure of how well the predicted values align with the actual values in the data via their difference. In terms of comparisons, a lower RMSE indicates a better performing model.
+
+## Model Building & Selection
+
+As stated above, the metric used for the model comparisons is RMSE, with the lower RMSE indicating a better model. 
+
+To begin the model selection process, the best models across the three recipes were compared. In all three recipes, the boosted tree model performed the best. 
+In recipe 1, the tuning parameters for this model include a `mtry` of 12, `trees` = 1279, and a `learn_rate` of 0.0469. As for recipe 2, it has the same tuning parameters except `mtry` = 14. For recipe 3, `mtry` = 14, `learn_rate` = 0.0956, and `trees` = 1720.
+
+
+```{r}
+#| label: mod-comparison
+rec_1_best <- read_rds("results/rec_1_comparison.rds")
+rec_2_best <- read_rds("results/rec_2_comparison.rds")
+rec_3_best <- read_rds("results/rec_3_comparison.rds")
+
+rec_1_best
+rec_2_best
+rec_3_best
+```
+As for the other models, the KNN model performed best with recipe 3, and the tuning parameters for this model were `neighbors` = 13. For recipes 1 and 2, the tuning parameter of `neighbors` was 12. For the elastic net model, it performed best with recipe 2, with `mixture` = 0.29 and `penalty` = 7.98^e-5. For recipes 1 and 3, the `mixture` were .108 and 0.697 respectively. The `penalty` for recipes 1 and 3 were 3.58e^-8 and 3.63e^-5. Finally, for the random forest model it performed best with recipe 1, with the tuning parameter `mtry` = 14. For recipes 1 and 2, the tuning parameter was 22 for both recipes.
+
+** talk about ordinary linear regression and null model **
+```{r}
+#| label: tuning-params-alt-mods
+load("results/best_mods_tuning.rda")
+knn_best
+en_best
+rf_best
+```
+
+Now, since the boosted tree model was the best performer in each recipe, the recipe performance was now assessed. Based on the findings, recipe three performed the best with the boosted tree model, as it had the lowest RMSE (0.01964). The final tuning metrics were `mtry` = 14, `learn_rate` = 0.0956, and `trees` = 1720.
+
+```{r}
+#| label: rec-comparison
+best_mod <- read_rds("results/best_mod.rds")
+
+best_mod
+
+# visualizing results
+ggplot(best_mod, aes(x = recipe, y = log_rmse)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = log_rmse - 1.96*se,
+                    ymax = log_rmse + 1.96*se), width = 0.2) +
+  theme_minimal() +
+  labs(title = "The Comparison of The Boosted Tree Model Performance Across Recipes")
+```
+
+The results above indicate that the winning model was the boosted tree model with recipe 3. Since this has the lowest RMSE, it indicated a small amount of differences between the predicted and actual values. The boosted tree model performing the best was not surprising as it was the model that was tuned the most, which led to a more effective model. Furthermore, the results were not surprising as the model had the greatest number of trees, which indicates there were more opportunities to identify and correct errors produced in previous trees. Based on the findings, the tuning process could be adjusted by including more levels to try to narrow down the tuning parameter range further. Recipe 3 performing the best indicated that the `pos` and `per` of a player was not important in determining how many points a player would average during a given season, as in this recipe they were removed instead of imputed.
+
+## Final Model Analysis
+
+Based on all the analysis conducted above, the boosted tree model with recipe 3 was fit to the entire training set, then to the testing set and its performance was evaluated with the R^2 value, in addition to RMSE. The model seems to be good at predicting the `log_pts` in the data set, as it is better than simply random guessing, which is what the null model essentially does.
+
+To begin, the final model performed better than the null model with an RMSE of 0.0165 in comparison to the null model's RMSE of 0.357. The R^2 value indicates the variance in the `log_pts` being dependent on the predictor variables and a high R^2 indicates more variance and a better performing model. In this case the R^2 value was 0.9979. These values were also calculated on the original scale of `pts` and the RMSE and R^2 value was 0.237 and 0.998, respectively, indicating a good model. 
+
+```{r}
+#| label: final-results
+# loading in results
+load("final_model/final_bt_metrics.rda")
+
+# performance metrics
+performance_metrics
+
+nba_predicted %>% 
+  ggplot(mapping = aes(x = pred_og, y = pts)) +
+  geom_point() + 
+  geom_smooth(method = "lm") +
+  labs(title = "The Predicted Values v. The Actual Values on the Original Scale")
+
+nba_predicted %>% 
+ggplot(nba_predicted, mapping = aes(x = log_pts, y = log_pred)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  labs(title = "The Predicted Values v. The Actual Values on the Log Scale")
+
+```
+
+When looking at the predicted results closely, the model tends to predict the values well with an even amount of over predicting and under predicting. However,
+on the original scale, as the average number of `pts` increased, it seems as though the model tended to over predict the values.
+
+## Conclusion
+
+In conclusion, the boosted tree model with the recipe 3 was fitted to the testing set and produced very good results as reflected in the chosen metrics. During this process, it was discovered that variables such as `ftm`, `fgm`, and `three_point_made` could not be used in the model creation process as it produced nearly perfect results. This is due to these variables being used by the data collectors in the calculations of the outcome variable. 
+
+When thinking about improvements and future explorations with this project, the first improvement would be thoroughly researching the data collection process to discover if any other predictor variables are used in the calculation of `pts`. Because the results of the model were so good, nearly perfect in fact, is indicating that there are more variables directly related in the calculation of `pts`. However, due to time constraints and lack of awareness of this issue it could not be further explored outside of the variables outlined in the previous paragraph.  
+
+Another next step would be using time-series data. It is clear that in the NBA, as the years progressed, the amount of talent in the league has increased, as there are more channels for identifying talented players. Implementing time-series data would allow those discrepancies in performance to be taken into account and a research question of "How many points would a player average in a specific era of the NBA?" could assessed. 
+
+When thinking of future work, because this data was used for my previous project of [Comparing NBA Performance Pre-Pandemic and Post-Pandemic](file:///Users/kaylaterrelonge/Desktop/Previous%20Classes/Stat%20301-1/Terrelonge_Kayla_final_project/Terrelonge_Kayla_EDA_final.html), a problem using this information to model how a player would perform in various pandemic conditions could be evaluated. In addition, this process of model building could be applied to other sports, such as baseball or football, with important outcome variables in those respective fields. For example, in football, instead of `pts` being an outcome variable, number of yards or touchdowns would be used.
+
+## References
+
+"NBA Statistics", (2001-2022), https://www.espn.com/nba/stats.
